@@ -19,3 +19,12 @@ The upstream 1.26.45 release combined July builds of `common` and
 `bedrock-connection` with an August build of `bedrock-codec`. GenevaMC uses the
 matched August 28 build 20 release of all three Cloudburst protocol components
 to keep NetherNet framing and the Bedrock 2169 codec synchronized.
+
+## Stalled-join recovery
+
+A NetherNet peer can reach the broadcaster while never sending the initial
+Bedrock `RequestNetworkSettingsPacket`. In that case the shared signaling
+socket remains open, so signaling-only health checks cannot see the failure.
+GenevaMC watches each new peer and rebuilds the advertised session when its
+Bedrock handshake has not begun within 32 seconds. Concurrent watchdogs are
+coalesced into one recovery.

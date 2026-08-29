@@ -47,7 +47,7 @@ public class RedirectPacketHandler implements BedrockPacketHandler {
     private final SessionManagerCore sessionManager;
 
     private ChainValidationResult.IdentityData identityData;
-    private boolean networkSettingsRequested = false;
+    private volatile boolean networkSettingsRequested = false;
     private final Logger logger;
 
     public RedirectPacketHandler(BedrockServerSession session, SessionInfo sessionInfo, SessionManagerCore sessionManager, Logger logger) {
@@ -98,6 +98,10 @@ public class RedirectPacketHandler implements BedrockPacketHandler {
 
         networkSettingsRequested = true;
         return PacketSignal.HANDLED;
+    }
+
+    public boolean hasStartedHandshake() {
+        return networkSettingsRequested;
     }
 
     @Override

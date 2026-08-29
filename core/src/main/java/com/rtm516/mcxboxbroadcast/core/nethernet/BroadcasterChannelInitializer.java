@@ -7,6 +7,8 @@ import com.rtm516.mcxboxbroadcast.core.nethernet.initializer.NetherNetBedrockCha
 import org.cloudburstmc.protocol.bedrock.BedrockPeer;
 import org.cloudburstmc.protocol.bedrock.BedrockServerSession;
 
+import java.util.concurrent.TimeUnit;
+
 public class BroadcasterChannelInitializer extends NetherNetBedrockChannelInitializer<BedrockServerSession> {
 
     private final SessionInfo sessionInfo;
@@ -27,6 +29,12 @@ public class BroadcasterChannelInitializer extends NetherNetBedrockChannelInitia
     @Override
     protected void initSession(BedrockServerSession session) {
         session.setLogging(true);
-        session.setPacketHandler(new RedirectPacketHandler(session, sessionInfo, sessionManager, logger));
+        RedirectPacketHandler handler = new RedirectPacketHandler(session, sessionInfo, sessionManager, logger);
+        session.setPacketHandler(handler);
+        sessionManager.scheduledThread().schedule(() -> {
+            if (!handler.hasStartedHandshake()) {
+                sessionManager.recoverStalledJoin();
+            }
+        }, 32, TimeUnit.SECONDS);
     }
 }

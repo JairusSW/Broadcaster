@@ -33,6 +33,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -60,6 +61,7 @@ public abstract class SessionManagerCore {
     private EventLoopGroup bossGroup;
     private EventLoopGroup workerGroup;
     private NetherNetXboxRpcSignaling signaling;
+    private final AtomicBoolean stalledJoinRecoveryRunning = new AtomicBoolean();
 
     private PortAllocatorConfig netherNetPortAllocatorConfig;
 
@@ -415,6 +417,29 @@ public abstract class SessionManagerCore {
             // Avoid a reconnect loop if a future NetherNet release changes its internals.
             return true;
         }
+    }
+
+    /**
+     * Rebuild the advertised session after a NetherNet peer connects but never
+     * begins the Bedrock handshake. The shared signaling websocket can remain
+     * open in this state, so the normal connection health check cannot detect it.
+     */
+    public void recoverStalledJoin() {
+        if (!stalledJoinRecoveryRunning.compareAndSet(false, true)) {
+            return;
+        }
+
+        scheduledThread().execute(() -> {
+            try {
+                logger.warn("NetherNet join stalled before the Bedrock handshake; re-creating session...");
+                createSession();
+                logger.info("NetherNet session recovered after stalled join");
+            } catch (SessionCreationException | SessionUpdateException error) {
+                logger.error("Failed to recover NetherNet session after stalled join", error);
+            } finally {
+                stalledJoinRecoveryRunning.set(false);
+            }
+        });
     }
 
     /**
