@@ -376,18 +376,44 @@ public abstract class SessionManagerCore {
     protected void checkConnection() {
         boolean rtaIsOpen = this.rtaWebsocket != null && this.rtaWebsocket.isOpen();
         boolean rtcIsOpen = this.netherNetChannel != null && this.netherNetChannel.isOpen();
+        boolean signalingIsOpen = signalingIsOpen();
 
         // Check if the connection is Lost
-        if (!rtaIsOpen || !rtcIsOpen) {
+        if (!rtaIsOpen || !rtcIsOpen || !signalingIsOpen) {
             try {
                 logger.warn("Connection to websocket lost, re-creating session...");
-                logger.debug("WebSocket status: RTA Open: " + rtaIsOpen + " RTC Open: " + rtcIsOpen);
+                logger.debug("WebSocket status: RTA Open: " + rtaIsOpen + " RTC Open: " + rtcIsOpen
+                    + " Signaling Open: " + signalingIsOpen);
 
                 createSession();
                 logger.info("WebSocket session reconnected");
             } catch (SessionCreationException | SessionUpdateException e) {
                 logger.error("Session is dead and hit exception trying to re-create it", e);
             }
+        }
+    }
+
+    /**
+     * NetherNet's local server channel can remain open after its Xbox signaling
+     * channel has closed. Treat that state as unhealthy so the normal session
+     * recreation path can recover automatically.
+     */
+    private boolean signalingIsOpen() {
+        if (this.signaling == null) {
+            return true;
+        }
+
+        try {
+            java.lang.reflect.Field channelField = Class
+                .forName("dev.kastle.netty.channel.nethernet.signaling.AbstractNetherNetXboxSignaling")
+                .getDeclaredField("channel");
+            channelField.setAccessible(true);
+            Object signalingChannel = channelField.get(this.signaling);
+            return signalingChannel instanceof Channel channel && channel.isOpen();
+        } catch (ReflectiveOperationException | RuntimeException error) {
+            logger.debug("Unable to inspect NetherNet signaling health: " + error);
+            // Avoid a reconnect loop if a future NetherNet release changes its internals.
+            return true;
         }
     }
 
