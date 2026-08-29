@@ -16,6 +16,7 @@ import com.rtm516.mcxboxbroadcast.core.nethernet.BroadcasterChannelInitializer;
 import dev.kastle.netty.channel.nethernet.NetherNetChannelFactory;
 import dev.kastle.netty.channel.nethernet.config.NetherChannelOption;
 import dev.kastle.netty.channel.nethernet.signaling.NetherNetXboxRpcSignaling;
+import dev.kastle.netty.channel.nethernet.signaling.NetherNetServerSignaling;
 import dev.kastle.webrtc.PeerConnectionFactory;
 import dev.kastle.webrtc.PortAllocatorConfig;
 import io.netty.bootstrap.ServerBootstrap;
@@ -34,6 +35,7 @@ import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -62,6 +64,8 @@ public abstract class SessionManagerCore {
     private EventLoopGroup workerGroup;
     private NetherNetXboxRpcSignaling signaling;
     private final AtomicBoolean stalledJoinRecoveryRunning = new AtomicBoolean();
+    private final AtomicLong netherNetJoinSequence = new AtomicLong();
+    private final AtomicLong completedNetherNetJoinSequence = new AtomicLong();
 
     private PortAllocatorConfig netherNetPortAllocatorConfig;
 
@@ -442,6 +446,22 @@ public abstract class SessionManagerCore {
         });
     }
 
+    private void watchIncomingNetherNetJoin(long connectionId) {
+        long sequence = netherNetJoinSequence.incrementAndGet();
+        logger.info("NetherNet received connection offer " + Long.toUnsignedString(connectionId));
+        scheduledThread().schedule(() -> {
+            if (completedNetherNetJoinSequence.get() < sequence) {
+                logger.warn("NetherNet connection " + Long.toUnsignedString(connectionId)
+                    + " did not reach transfer; re-creating session");
+                recoverStalledJoin();
+            }
+        }, 32, TimeUnit.SECONDS);
+    }
+
+    public void markNetherNetJoinTransferred() {
+        completedNetherNetJoinSequence.set(netherNetJoinSequence.get());
+    }
+
     /**
      * Use the data in the cache to get the Xbox authentication header
      *
@@ -518,7 +538,15 @@ public abstract class SessionManagerCore {
 
         long netherNetId = this.sessionInfo.getNetherNetId().longValue();
 
-        this.signaling = new NetherNetXboxRpcSignaling(netherNetId, getMCTokenHeader());
+        this.signaling = new NetherNetXboxRpcSignaling(netherNetId, getMCTokenHeader()) {
+            @Override
+            public void setNewConnectionHandler(NetherNetServerSignaling.NewConnectionHandler handler) {
+                super.setNewConnectionHandler((connectionId, offer, token) -> {
+                    watchIncomingNetherNetJoin(connectionId);
+                    handler.onConnect(connectionId, offer, token);
+                });
+            }
+        };
         this.sessionInfo.setPmsgId(getAuthManager().getMinecraftSession().getCached().getParsedToken().getPayload().reqString("pmid"));
 
         this.bossGroup = new NioEventLoopGroup(1);

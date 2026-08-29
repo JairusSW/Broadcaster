@@ -257,6 +257,7 @@ public class RedirectPacketHandler implements BedrockPacketHandler {
         session.sendPacket(transferPacket);
         handshakeStage = "transfer";
         transferCompleted = true;
+        sessionManager.markNetherNetJoinTransferred();
 
         try {
             if (identityData != null) {

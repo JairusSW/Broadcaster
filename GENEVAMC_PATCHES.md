@@ -29,3 +29,8 @@ GenevaMC watches each new peer and rebuilds the advertised session when its
 Bedrock handshake has not completed the transfer within 32 seconds. It logs
 the last completed handshake stage for diagnosis. Concurrent watchdogs are
 coalesced into one recovery.
+
+The watcher also wraps the incoming NetherNet offer callback. This is required
+for ICE/WebRTC failures because the Bedrock child-channel initializer is not
+invoked until after WebRTC connects. An offer that does not reach transfer in
+32 seconds therefore triggers the same coalesced session recovery.
