@@ -26,5 +26,6 @@ A NetherNet peer can reach the broadcaster while never sending the initial
 Bedrock `RequestNetworkSettingsPacket`. In that case the shared signaling
 socket remains open, so signaling-only health checks cannot see the failure.
 GenevaMC watches each new peer and rebuilds the advertised session when its
-Bedrock handshake has not begun within 32 seconds. Concurrent watchdogs are
+Bedrock handshake has not completed the transfer within 32 seconds. It logs
+the last completed handshake stage for diagnosis. Concurrent watchdogs are
 coalesced into one recovery.

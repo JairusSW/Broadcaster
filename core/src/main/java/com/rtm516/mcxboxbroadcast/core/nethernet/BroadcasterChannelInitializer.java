@@ -32,7 +32,8 @@ public class BroadcasterChannelInitializer extends NetherNetBedrockChannelInitia
         RedirectPacketHandler handler = new RedirectPacketHandler(session, sessionInfo, sessionManager, logger);
         session.setPacketHandler(handler);
         sessionManager.scheduledThread().schedule(() -> {
-            if (!handler.hasStartedHandshake()) {
+            if (!handler.hasCompletedTransfer()) {
+                logger.warn("NetherNet join did not complete; last handshake stage: " + handler.handshakeStage());
                 sessionManager.recoverStalledJoin();
             }
         }, 32, TimeUnit.SECONDS);

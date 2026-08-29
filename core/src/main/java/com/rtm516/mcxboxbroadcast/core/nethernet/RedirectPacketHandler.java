@@ -48,6 +48,8 @@ public class RedirectPacketHandler implements BedrockPacketHandler {
 
     private ChainValidationResult.IdentityData identityData;
     private volatile boolean networkSettingsRequested = false;
+    private volatile boolean transferCompleted = false;
+    private volatile String handshakeStage = "connected";
     private final Logger logger;
 
     public RedirectPacketHandler(BedrockServerSession session, SessionInfo sessionInfo, SessionManagerCore sessionManager, Logger logger) {
@@ -77,6 +79,8 @@ public class RedirectPacketHandler implements BedrockPacketHandler {
 
     @Override
     public PacketSignal handle(RequestNetworkSettingsPacket packet) {
+        handshakeStage = "network-settings";
+        logger.info("NetherNet handshake reached network settings (protocol " + packet.getProtocolVersion() + ")");
         int clientProtocolVersion = packet.getProtocolVersion();
         int serverProtocolVersion = Constants.BEDROCK_CODEC.getProtocolVersion();
 
@@ -100,12 +104,18 @@ public class RedirectPacketHandler implements BedrockPacketHandler {
         return PacketSignal.HANDLED;
     }
 
-    public boolean hasStartedHandshake() {
-        return networkSettingsRequested;
+    public boolean hasCompletedTransfer() {
+        return transferCompleted;
+    }
+
+    public String handshakeStage() {
+        return handshakeStage;
     }
 
     @Override
     public PacketSignal handle(LoginPacket packet) {
+        handshakeStage = "login";
+        logger.info("NetherNet handshake reached login");
         if (!networkSettingsRequested) {
             PlayStatusPacket statusPacket = new PlayStatusPacket();
             statusPacket.setStatus(PlayStatusPacket.Status.LOGIN_FAILED_CLIENT_OLD);
@@ -153,6 +163,8 @@ public class RedirectPacketHandler implements BedrockPacketHandler {
 
     @Override
     public PacketSignal handle(ResourcePackClientResponsePacket packet) {
+        handshakeStage = "resource-packs-" + packet.getStatus();
+        logger.info("NetherNet handshake reached resource-pack status " + packet.getStatus());
         switch (packet.getStatus()) {
             case COMPLETED:
                 sendStartGame();
@@ -243,6 +255,8 @@ public class RedirectPacketHandler implements BedrockPacketHandler {
         transferPacket.setAddress(sessionInfo.getIp());
         transferPacket.setPort(sessionInfo.getPort());
         session.sendPacket(transferPacket);
+        handshakeStage = "transfer";
+        transferCompleted = true;
 
         try {
             if (identityData != null) {
